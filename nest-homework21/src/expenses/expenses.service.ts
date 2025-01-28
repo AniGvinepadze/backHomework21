@@ -4,20 +4,33 @@ import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Expense } from './schema/expense.schema';
 import { isValidObjectId, Model } from 'mongoose';
-import { error } from 'console';
+import { User } from 'src/users/schema/user.schema';
+
 
 @Injectable()
 export class ExpensesService {
+constructor(
+  @InjectModel('expense') private expenseModel:Model<Expense>,
+@InjectModel('user') private userModel:Model<User>
+){}
 
-  constructor(@InjectModel('expense') private expenseModel:Model<Expense>){}
 
-  async create(createExpenseDto: CreateExpenseDto) {
-    const expense = await this.expenseModel.create(createExpenseDto)
-    return expense
+  async create(createExpenseDto: CreateExpenseDto,userId:string) {
+    const user = await this.userModel.findById(userId)
+    if(!user) throw new NotFoundException('user not found')
+    const newExpense =  await this.expenseModel.create({
+  ...createExpenseDto,
+  user:user._id
+})
+await this.userModel.findByIdAndUpdate(user._id,{
+  $push:{expenses:newExpense._id}
+
+})
+return newExpense
   }
 
   findAll() {
-    return this.expenseModel.find()
+    return this.expenseModel.find().populate({path:'user',select:'-expenses -createdAt -__v'})
   }
 
   async findOne(id: string) {
@@ -35,10 +48,12 @@ export class ExpensesService {
     return updateReq
   }
 
-  async remove(id: string) {
+  async remove(id: string,userId) {
     if(!isValidObjectId(id)) throw new BadRequestException("Invalid id")
     const deletedExpense = await this.expenseModel.findByIdAndDelete(id)
   if(!deletedExpense) throw new BadRequestException("expense was not deleted")
+    await this.userModel.findByIdAndUpdate(userId,{$pull:{expenses:deletedExpense._id
+  }})
     return deletedExpense
   }
 }

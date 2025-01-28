@@ -11,7 +11,7 @@ import { InjectModel } from '@nestjs/mongoose';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private usersModel: Model<User>) {}
+  constructor(@InjectModel("user") private usersModel: Model<User>) {}
 
   async create(createUserDto: CreateUserDto) {
     const existUser = await this.usersModel.findOne({
@@ -24,7 +24,7 @@ export class UsersService {
   }
 
   findAll() {
-    return this.usersModel.find();
+    return this.usersModel.find().populate({path:'expenses',select:"-user"})
   }
 
   async findOne(id: string) {
@@ -50,5 +50,13 @@ export class UsersService {
     const deletedUser = await this.usersModel.findByIdAndDelete(id);
     if (!deletedUser) throw new BadRequestException('user not found');
     return deletedUser;
+  }
+
+
+  async addPost(userId,expensesId){
+    const updateUser = await this.usersModel.findByIdAndUpdate(userId,{
+      $push:{expenses:expensesId}
+    })
+    return updateUser
   }
 }
