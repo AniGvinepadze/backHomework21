@@ -1,17 +1,45 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { isValidObjectId, Model } from 'mongoose';
 import { User } from './schema/user.schema';
 import { InjectModel } from '@nestjs/mongoose';
+import { faker } from '@faker-js/faker';
+import { QuerryParams } from './dto/query-params.dto';
 
 @Injectable()
-export class UsersService {
-  constructor(@InjectModel("user") private usersModel: Model<User>) {}
+export class UsersService implements OnModuleInit {
+  constructor(@InjectModel('user') private usersModel: Model<User>) {}
+
+  async onModuleInit() {
+    const count = await this.usersModel.countDocuments();
+
+    if (count === 0) {
+      const userList = [];
+
+      for (let i = 0; i < 30_000; i++) {
+        const user = {
+          name: faker.commerce.productName(),
+          desc: faker.commerce.productDescription,
+          age: faker.number.int({ min: 1, max: 100 }),
+        };
+        userList.push(user);
+      }
+      console.log(userList.length, 'length');
+      await this.usersModel.insertMany(userList);
+      console.log('inserted');
+    }
+  }
+
+  deleteAll() {
+    return this.usersModel.deleteMany();
+  }
 
   async create(createUserDto: CreateUserDto) {
     const existUser = await this.usersModel.findOne({
@@ -23,8 +51,24 @@ export class UsersService {
     return user;
   }
 
-  findAll() {
-    return this.usersModel.find().populate({path:'expenses',select:"-user"})
+  async findAll({ page, take }: QuerryParams) {
+    const limit = Math.min(take, 30);
+
+    return this.usersModel
+      .find()
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate({ path: 'expenses', select: '-user' });
+  }
+
+  async getUser({ ageFrom, ageTo}: QuerryParams) {
+    const findByage = await this.usersModel.find({ age: 10 });
+
+    if (!findByage) return { $gte: ageFrom, $lte: ageTo };
+    
+    
+
+    return findByage
   }
 
   async findOne(id: string) {
@@ -52,11 +96,10 @@ export class UsersService {
     return deletedUser;
   }
 
-
-  async addPost(userId,expensesId){
-    const updateUser = await this.usersModel.findByIdAndUpdate(userId,{
-      $push:{expenses:expensesId}
-    })
-    return updateUser
+  async addPost(userId, expensesId) {
+    const updateUser = await this.usersModel.findByIdAndUpdate(userId, {
+      $push: { expenses: expensesId },
+    });
+    return updateUser;
   }
 }
